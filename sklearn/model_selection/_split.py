@@ -2098,13 +2098,17 @@ def train_test_split(*arrays, **options):
         If None, the random number generator is the RandomState instance used
         by `np.random`.
 
-    shuffle : boolean, optional (default=True)
-        Whether or not to shuffle the data before splitting. If shuffle=False
-        then stratify must be None.
+    shuffle : None or str (default='simple')
+        How to shuffle the data before splitting.
+        None, no shuffle.
+        For str, one of 'simple', 'stratified' and 'group', corresponding to
+        `ShuffleSplit`, `StratifiedShuffleSplit` and `GroupShuffleSplit`,
+        respectively.
 
-    stratify : array-like or None (default=None)
-        If not None, data is split in a stratified fashion, using this as
-        the class labels.
+    labels : array-like or None (default=None)
+        Ignored if shuffle is None or 'simple'.
+        When shuffle='stratified', this array is used as class labels.
+        When shuffle='group', this array is used as groups.
 
     Returns
     -------
@@ -2155,8 +2159,8 @@ def train_test_split(*arrays, **options):
     test_size = options.pop('test_size', None)
     train_size = options.pop('train_size', None)
     random_state = options.pop('random_state', None)
-    stratify = options.pop('stratify', None)
-    shuffle = options.pop('shuffle', True)
+    shuffle = options.pop('shuffle', 'simple')
+    labels = options.pop('labels', None)
 
     if options:
         raise TypeError("Invalid parameters passed: %s" % str(options))
@@ -2167,26 +2171,37 @@ def train_test_split(*arrays, **options):
     n_train, n_test = _validate_shuffle_split(n_samples, test_size, train_size,
                                               default_test_size=0.25)
 
-    if shuffle is False:
-        if stratify is not None:
-            raise ValueError(
-                "Stratified train/test split is not implemented for "
-                "shuffle=False")
+    shuffle_options = dict(test_size=n_test,
+                           train_size=n_train,
+                           random_state=random_state)
+
+    if shuffle is None:
+        if labels is not None:
+            warnings.warn("The `labels` is ignored for "
+                          "shuffle being None!")
 
         train = np.arange(n_train)
         test = np.arange(n_train, n_train + n_test)
 
+    elif shuffle == 'simple':
+        if labels is not None:
+            warnings.warn("The `labels` is not needed and therefore "
+                            "ignored for ShuffleSplit, as shuffle='simple'!")
+
+        cv = ShuffleSplit(**shuffle_options)
+        train, test = next(cv.split(X=arrays[0], y=None))
+
+    elif shuffle == 'stratified':
+        cv = StratifiedShuffleSplit(**shuffle_options)
+        train, test = next(cv.split(X=arrays[0], y=labels))
+
+    elif shuffle == 'group':
+        cv = GroupShuffleSplit(**shuffle_options)
+        train, test = next(cv.split(X=arrays[0], y=None, groups=labels))
+
     else:
-        if stratify is not None:
-            CVClass = StratifiedShuffleSplit
-        else:
-            CVClass = ShuffleSplit
-
-        cv = CVClass(test_size=n_test,
-                     train_size=n_train,
-                     random_state=random_state)
-
-        train, test = next(cv.split(X=arrays[0], y=stratify))
+        raise ValueError("The argument `shuffle` only supports None, 'simple', "
+                            "'stratified' and 'group', but got `%s`!" % shuffle)
 
     return list(chain.from_iterable((safe_indexing(a, train),
                                      safe_indexing(a, test)) for a in arrays))
