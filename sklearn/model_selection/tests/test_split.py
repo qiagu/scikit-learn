@@ -1051,7 +1051,11 @@ def test_train_test_split_errors():
                   some_argument=1.1)
     pytest.raises(ValueError, train_test_split, range(3), range(42))
     pytest.raises(ValueError, train_test_split, range(10),
-                  shuffle=False, stratify=True)
+                  shuffle=True)
+    pytest.raises(ValueError, train_test_split, range(10),
+                  shuffle='group', labels=None)
+    pytest.raises(TypeError, train_test_split, range(10),
+                  shuffle='stratified', labels=None)
 
     with pytest.raises(ValueError,
                        match=r'train_size=11 should be either positive and '
@@ -1129,22 +1133,47 @@ def test_train_test_split():
     assert_equal(split[2].shape, (7, 7, 11))
     assert_equal(split[3].shape, (3, 7, 11))
 
-    # test stratification option
+    # test shuffle='stratified' option
     y = np.array([1, 1, 1, 1, 2, 2, 2, 2])
     for test_size, exp_test_size in zip([2, 4, 0.25, 0.5, 0.75],
                                         [2, 4, 2, 4, 6]):
         train, test = train_test_split(y, test_size=test_size,
-                                       stratify=y,
+                                       shuffle='stratified',
+                                       labels=y,
                                        random_state=0)
         assert_equal(len(test), exp_test_size)
         assert_equal(len(test) + len(train), len(y))
         # check the 1:1 ratio of ones and twos in the data is preserved
         assert_equal(np.sum(train == 1), np.sum(train == 2))
 
+    # test shuffle='group' option
+    y = np.array([1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4])
+    for test_size, exp_test_size in zip([1, 2, 0.25, 0.5, 0.75],
+                                        [3, 6, 3, 6, 9]):
+        train, test = train_test_split(y, test_size=test_size,
+                                       shuffle='group',
+                                       labels=y,
+                                       random_state=0)
+        assert_equal(len(test), exp_test_size)
+        assert_equal(np.unique(test).size, exp_test_size//3)
+        assert_equal(len(test) + len(train), len(y))
+        assert_equal(np.unique(train).size + np.unique(test).size, 4)
+
+    # test shuffle='simple' option
+    y = np.array([1, 1, 1, 1, 2, 2, 2, 2])
+    for test_size, exp_test_size in zip([2, 4, 0.25, 0.5, 0.75],
+                                        [2, 4, 2, 4, 6]):
+        train, test = train_test_split(y, test_size=test_size,
+                                       shuffle='simple',
+                                       labels=y,
+                                       random_state=42)
+        assert_equal(len(test), exp_test_size)
+        assert_equal(len(test) + len(train), len(y))
+
     # test unshuffled split
     y = np.arange(10)
     for test_size in [2, 0.2]:
-        train, test = train_test_split(y, shuffle=False, test_size=test_size)
+        train, test = train_test_split(y, shuffle=None, test_size=test_size)
         assert_array_equal(test, [8, 9])
         assert_array_equal(train, [0, 1, 2, 3, 4, 5, 6, 7])
 
@@ -1194,13 +1223,16 @@ def test_train_test_split_list_input():
     y2 = np.hstack((np.ones(4), np.zeros(3)))
     y3 = y2.tolist()
 
-    for stratify in (True, False):
+    for shuffle in (None, 'simple', 'stratified', 'group'):
         X_train1, X_test1, y_train1, y_test1 = train_test_split(
-            X, y1, stratify=y1 if stratify else None, random_state=0)
+            X, y1, labels=y1 if shuffle in ('stratified', 'group')
+                else None, random_state=0)
         X_train2, X_test2, y_train2, y_test2 = train_test_split(
-            X, y2, stratify=y2 if stratify else None, random_state=0)
+            X, y2, labels=y2 if shuffle in ('stratified', 'group')
+                else None, random_state=0)
         X_train3, X_test3, y_train3, y_test3 = train_test_split(
-            X, y3, stratify=y3 if stratify else None, random_state=0)
+            X, y3, labels=y3 if shuffle in ('stratified', 'group')
+                else None, random_state=0)
 
         np.testing.assert_equal(X_train1, X_train2)
         np.testing.assert_equal(y_train2, y_train3)

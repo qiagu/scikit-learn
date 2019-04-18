@@ -2149,7 +2149,7 @@ def train_test_split(*arrays, **options):
     >>> y_test
     [1, 4]
 
-    >>> train_test_split(y, shuffle=False)
+    >>> train_test_split(y, shuffle=None)
     [[0, 1, 2], [3, 4]]
 
     """
@@ -2168,6 +2168,14 @@ def train_test_split(*arrays, **options):
     arrays = indexable(*arrays)
 
     n_samples = _num_samples(arrays[0])
+    if shuffle == 'group':
+        if labels is None:
+            raise ValueError("When shuffle='group', "
+                             "labels should not be None!")
+        labels = check_array(labels, ensure_2d=False, dtype=None)
+        uniques = np.unique(labels)
+        n_samples = uniques.size
+
     n_train, n_test = _validate_shuffle_split(n_samples, test_size, train_size,
                                               default_test_size=0.25)
 
